@@ -34,13 +34,79 @@ describe('GET /tickets', () => {
       assigneeName: 'Ada Fixture',
       commentCount: 2,
       slaHours: 4,
+      // open, created 2h ago on a 4h SLA → comfortably on track
+      slaState: 'ok',
     });
     expect(printer.createdAt).toBeTypeOf('string');
+    expect(printer.slaDeadline).toBeTypeOf('string');
+    // ~2h left of the 4h window
+    expect(printer.slaRemainingSeconds).toBeGreaterThan(6000);
+    expect(printer.slaRemainingSeconds).toBeLessThan(8000);
 
     const unassigned = tickets.find((t: any) => t.subject === 'Unassigned question');
     expect(unassigned.assigneeId).toBeNull();
     expect(unassigned.assigneeName).toBeNull();
     expect(unassigned.commentCount).toBe(0);
+  });
+});
+
+describe('SLA computation', () => {
+  // Insert a ticket with precise timings and read back its computed SLA state.
+  async function slaStateFor(subject: string, values: string): Promise<any> {
+    await pool.query(
+      `insert into tickets (subject, description, status, priority, sla_hours, created_at, updated_at, resolved_at)
+       values ($1, 'x', ${values})`,
+      [subject]
+    );
+    const res = await app.inject({ method: 'GET', url: '/tickets' });
+    return res.json().find((t: any) => t.subject === subject);
+  }
+
+  it('flags an active ticket inside 25% of its window as at_risk', async () => {
+    // 4h SLA, created 3.5h ago → 30m left = 12.5% of the window
+    const t = await slaStateFor(
+      'at risk',
+      `'open', 'medium', 4, now() - interval '3 hours 30 minutes', now(), null`
+    );
+    expect(t.slaState).toBe('at_risk');
+    expect(t.slaRemainingSeconds).toBeGreaterThan(0);
+  });
+
+  it('flags an active ticket past its deadline as breached', async () => {
+    // in_progress keeps the clock live even with no resolved_at
+    const t = await slaStateFor(
+      'active overdue',
+      `'in_progress', 'medium', 4, now() - interval '6 hours', now(), null`
+    );
+    expect(t.slaState).toBe('breached');
+    expect(t.slaRemainingSeconds).toBeLessThan(0);
+  });
+
+  it('freezes a ticket resolved before its deadline as met', async () => {
+    // 8h SLA, created 10h ago, resolved 2h after creation (8h ago) — within SLA
+    const t = await slaStateFor(
+      'resolved on time',
+      `'resolved', 'medium', 8, now() - interval '10 hours', now() - interval '8 hours', now() - interval '8 hours'`
+    );
+    expect(t.slaState).toBe('met');
+  });
+
+  it('freezes a ticket resolved after its deadline as breached', async () => {
+    // 4h SLA, created 10h ago, resolved 5h after creation (5h ago) — overran
+    const t = await slaStateFor(
+      'resolved late',
+      `'resolved', 'medium', 4, now() - interval '10 hours', now() - interval '5 hours', now() - interval '5 hours'`
+    );
+    expect(t.slaState).toBe('breached');
+  });
+
+  it('marks a closed ticket with no resolution time as unknown', async () => {
+    const t = await slaStateFor(
+      'closed no resolution',
+      `'closed', 'medium', 8, now() - interval '30 days', now() - interval '28 days', null`
+    );
+    expect(t.slaState).toBe('unknown');
+    expect(t.slaRemainingSeconds).toBeNull();
   });
 });
 
