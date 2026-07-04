@@ -100,6 +100,15 @@ describe('SLA computation', () => {
     expect(t.slaState).toBe('breached');
   });
 
+  it('counts a ticket resolved exactly at its deadline as met', async () => {
+    // 8h SLA, created 8h ago, resolved now → resolved_at == deadline (boundary)
+    const t = await slaStateFor(
+      'resolved on the line',
+      `'resolved', 'medium', 8, now() - interval '8 hours', now(), now()`
+    );
+    expect(t.slaState).toBe('met');
+  });
+
   it('marks a closed ticket with no resolution time as unknown', async () => {
     const t = await slaStateFor(
       'closed no resolution',
@@ -123,6 +132,11 @@ describe('GET /tickets/:id', () => {
       authorName: 'Grace Fixture',
       body: 'Extinguisher deployed, assessing damage.',
     });
+    // SLA fields are computed on the get-by-id path too (open, 4h SLA, 2h old)
+    expect(ticket.slaState).toBe('ok');
+    expect(ticket.slaDeadline).toBeTypeOf('string');
+    expect(ticket.slaRemainingSeconds).toBeGreaterThan(6000);
+    expect(ticket.slaRemainingSeconds).toBeLessThan(8000);
   });
 
   it('returns 404 for an unknown ticket', async () => {
@@ -155,7 +169,13 @@ describe('POST /tickets', () => {
       slaHours: 8,
       commentCount: 0,
       resolvedAt: null,
+      // Exercises the RETURNING path, which builds the SLA columns unqualified
+      slaState: 'ok',
     });
+    expect(ticket.slaDeadline).toBeTypeOf('string');
+    // freshly created on an 8h SLA → the full window (~28800s) remains
+    expect(ticket.slaRemainingSeconds).toBeGreaterThan(28000);
+    expect(ticket.slaRemainingSeconds).toBeLessThanOrEqual(28800);
   });
 
   it('rejects an invalid payload', async () => {
