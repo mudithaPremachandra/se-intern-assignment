@@ -11,7 +11,12 @@ export interface Ticket {
   createdAt: string;
   updatedAt: string;
   resolvedAt: string | null;
+  slaDeadline: string;
+  slaState: SlaState;
+  slaRemainingSeconds: number | null;
 }
+
+export type SlaState = 'ok' | 'at_risk' | 'breached' | 'met' | 'unknown';
 
 export interface Comment {
   id: number;
