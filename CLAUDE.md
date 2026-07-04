@@ -22,8 +22,9 @@ DeskLine is a support-desk service: an API (`api/`) and an agent-facing web UI (
 
 ## Conventions
 
-- **All SQL lives in `*.repository.ts` files; route handlers (`*.routes.ts`) stay thin.** Repositories return DTOs, not raw rows.
+- **All SQL lives in `*.repository.ts` files; route handlers (`*.routes.ts`) stay thin.** Repositories return DTOs, not raw rows. Derived/computed per-row values (e.g. an SLA state from timestamps) are computed in SQL here too, not in the web client.
 - DB columns are `snake_case`; API responses are `camelCase`, converted **only** in `src/mappers.ts`.
+- `pg` returns `bigint`/`numeric` columns as **strings**; coerce them to `number` in `src/mappers.ts` (allow `null` when the SQL can yield null).
 - Request validation: zod schemas in `*.schema.ts`, parsed inside handlers.
 - Errors: throw `new AppError(statusCode, message)`; the central handler in `src/errors.ts` renders it (ZodError → 400).
 - Feature-folder layout under `api/src/` (`tickets/`, `users/`, `comments/`); routes registered in `server.ts` via `buildServer()`.
