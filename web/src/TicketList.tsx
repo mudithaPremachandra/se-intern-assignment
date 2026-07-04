@@ -77,14 +77,29 @@ export function TicketList() {
             ? `Last refreshed ${new Date(refreshedAt).toLocaleTimeString()}`
             : ' '}
         </span>
-        <button
-          type="button"
-          className="refresh-btn"
-          onClick={() => load()}
-          disabled={refreshing}
-        >
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="toolbar-actions">
+          <button
+            type="button"
+            className="refresh-btn"
+            onClick={() => load()}
+            disabled={refreshing}
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {hasFilters && (
+            <button
+              type="button"
+              className="clear-filters"
+              onClick={() => {
+                setStatuses(new Set());
+                setAssigneeIds(new Set());
+                setSlaStates(new Set());
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       </div>
       <table className="ticket-table">
         <thead>
@@ -129,19 +144,6 @@ export function TicketList() {
                   </label>
                 ))}
               </FilterPopover>
-              {hasFilters && (
-                <button
-                  type="button"
-                  className="clear-filters"
-                  onClick={() => {
-                    setStatuses(new Set());
-                    setAssigneeIds(new Set());
-                    setSlaStates(new Set());
-                  }}
-                >
-                  Clear filters
-                </button>
-              )}
             </th>
           </tr>
         </thead>
